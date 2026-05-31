@@ -1,0 +1,388 @@
+import os
+
+
+folders = [
+    'data/raw',
+    'data/cleaned',
+    'charts'
+]
+
+
+for folder in folders:
+    os.makedirs(folder, exist_ok=True)
+
+print('Project folders created successfully!')
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+import pandas as pd
+df = pd.read_csv('data/raw/medical_noshow.csv')
+
+df.head()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+print('Shape:', df.shape)
+
+print('Total appointments:', df.shape[0])
+
+print('Total columns:', df.shape[1])
+
+print('\nColumn names:')
+print(df.columns.tolist())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+print(df.dtypes)
+
+df.info()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Check how many missing values exist in each column
+print('Missing values per column:')
+print(df.isnull().sum())
+
+# Show missing values as a percentage of total rows
+print('\nMissing value percentage:')
+missing_percent = (df.isnull().sum() / len(df)) * 100
+print(missing_percent.round(2))
+
+# Visual check — True means missing, False means present
+print('\nAny missing values?', df.isnull().values.any())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+df_no_nulls = df.dropna()
+print('Rows after dropping nulls:', len(df_no_nulls))
+
+df = df[df['Age'] >= 0]
+print('Rows after removing invalid ages:', len(df))
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Count duplicate rows
+print('Number of duplicate rows:', df.duplicated().sum())
+
+# View the duplicate rows (if any)
+print(df[df.duplicated()])
+
+# Remove duplicate rows, keep the first occurrence
+df = df.drop_duplicates()
+print('Rows after removing duplicates:', len(df))
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# See current column names
+print('Before:', df.columns.tolist())
+
+# Rename all columns
+df.columns = df.columns.str.lower()
+df.columns = df.columns.str.replace('-', '_')
+df.columns = df.columns.str.replace(' ', '_')
+
+# Fix specific column name typos
+df = df.rename(columns={
+    'hipertension': 'hypertension',
+    'handcap': 'handicap',
+    'no_show': 'no_show'
+})
+
+print('After:', df.columns.tolist())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+df['scheduledday'] = pd.to_datetime(df['scheduledday'])
+df['appointmentday'] = pd.to_datetime(df['appointmentday'])
+df['waiting_days'] = (df['appointmentday'] - df['scheduledday']).dt.days
+
+df = df[df['waiting_days'] >= 0]
+
+print('Date columns converted successfully!')
+print(df[['scheduledday', 'appointmentday', 'waiting_days']].head())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+print('Gender unique values:', df['gender'].unique())
+
+df['gender'] = df['gender'].str.upper()
+
+print('No-show unique values:', df['no_show'].unique())
+
+df['no_show_binary'] = df['no_show'].map({'Yes': 1, 'No': 0})
+
+print('Standardisation complete!')
+print(df[['gender', 'no_show', 'no_show_binary']].head())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Save the cleaned DataFrame to a new CSV file
+df.to_csv('data/cleaned/medical_noshow_cleaned.csv', index=False)
+
+# index=False means don't save the row numbers as a column
+
+print('Cleaned dataset saved!')
+print(f'Final shape: {df.shape[0]} rows and {df.shape[1]} columns')
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+print(df.describe())
+
+noshow_rate = df['no_show_binary'].mean() * 100
+print(f'\nOverall no-show rate: {noshow_rate:.1f}%')
+
+print('\nGender distribution:')
+print(df['gender'].value_counts())
+
+print('\nNo-show distribution:')
+print(df['no_show'].value_counts())
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set a clean visual style for all charts
+sns.set_style('whitegrid')
+
+# Create a figure with specified size (width=10, height=6 inches)
+plt.figure(figsize=(10, 6))
+
+# Draw a histogram of patient ages
+# bins=20 means divide the range into 20 equal sections
+# kde=True draws a smooth curve over the histogram
+sns.histplot(data=df, x='age', bins=20, kde=True, color='steelblue')
+
+# Add title and axis labels
+plt.title('Age Distribution of Patients', fontsize=16, fontweight='bold')
+plt.xlabel('Age (years)', fontsize=12)
+plt.ylabel('Number of Patients', fontsize=12)
+
+# Save the chart as an image file
+plt.savefig('charts/age_distribution.png', dpi=150, bbox_inches='tight')
+plt.show()
+print('Chart saved!')
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Calculate no-show rate for each gender
+# groupby splits the data into groups, then we calculate the mean of each group
+gender_noshow = df.groupby('gender')['no_show_binary'].mean() * 100
+print('No-show rate by gender:')
+print(gender_noshow.round(1))
+
+# Create a bar chart
+plt.figure(figsize=(8, 5))
+gender_noshow.plot(kind='bar', color=['#FF9999', '#66B2FF'], edgecolor='black')
+plt.title('No-Show Rate by Gender', fontsize=16, fontweight='bold')
+plt.xlabel('Gender', fontsize=12)
+plt.ylabel('No-Show Rate (%)', fontsize=12)
+plt.xticks(rotation=0)
+plt.ylim(0, 30)     # Set y-axis from 0 to 30%
+
+# Add value labels on top of each bar
+for i, v in enumerate(gender_noshow):
+    plt.text(i, v + 0.5, f'{v:.1f}%', ha='center', fontweight='bold')
+
+plt.savefig('charts/noshow_by_gender.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+sms_noshow = df.groupby('sms_received')['no_show_binary'].mean() * 100
+
+sms_noshow.index = ['No SMS', 'SMS Sent']
+print('No-show rate by SMS:')
+print(sms_noshow.round(1))
+
+plt.figure(figsize=(8, 5))
+sms_noshow.plot(kind='bar', color=['#FFA07A', '#90EE90'], edgecolor='black')
+plt.title('No-Show Rate: SMS Reminder vs No Reminder', fontsize=14, fontweight='bold')
+plt.xlabel('SMS Status', fontsize=12)
+plt.ylabel('No-Show Rate (%)', fontsize=12)
+plt.xticks(rotation=0)
+
+for i, v in enumerate(sms_noshow):
+    plt.text(i, v + 0.5, f'{v:.1f}%', ha='center', fontweight='bold')
+
+plt.savefig('charts/noshow_by_sms.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Select only numerical columns for correlation
+numerical_cols = ['age', 'scholarship', 'hypertension', 'diabetes',
+                  'alcoholism', 'handicap', 'sms_received', 'no_show_binary', 'waiting_days']
+
+# Calculate correlation matrix
+corr_matrix = df[numerical_cols].corr()
+
+# Create a heatmap
+plt.figure(figsize=(10, 8))
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    fmt='.2f',
+    cmap='coolwarm',
+    center=0,
+    square=True
+)
+plt.title('Correlation Heatmap of All Numerical Features', fontsize=14, fontweight='bold')
+plt.savefig('charts/correlation_heatmap.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+df['age_group'] = pd.cut(
+    df['age'],
+    bins=[0, 12, 17, 35, 60, 120],
+    labels=['Child', 'Teen', 'Young Adult', 'Middle-Aged', 'Senior'],
+    right=True    # includes the right boundary
+)
+
+print('Patients by age group:')
+print(df['age_group'].value_counts().sort_index())
+
+age_noshow = df.groupby('age_group')['no_show_binary'].mean() * 100
+print('\nNo-show rate by age group:')
+print(age_noshow.round(1))
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+df['appointment_dayofweek'] = df['appointmentday'].dt.day_name()
+
+day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+day_noshow = df.groupby('appointment_dayofweek')['no_show_binary'].mean() * 100
+day_noshow = day_noshow.reindex(day_order)
+
+print('No-show rate by day of week:')
+print(day_noshow.round(1))
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Encode gender: Female = 0, Male = 1
+df['gender_encoded'] = df['gender'].map({'F': 0, 'M': 1})
+
+print(df[['gender', 'gender_encoded']].head(10))
+
+# Save the feature-engineered dataset
+df.to_csv('data/cleaned/medical_noshow_features.csv', index=False)
+print('Feature-engineered dataset saved!')
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+plt.figure(figsize=(10, 6))
+
+age_noshow_sorted = df.groupby('age_group', observed=True)['no_show_binary'].mean() * 100
+
+colors = ['#4472C4', '#ED7D31', '#A9D18E', '#FF0000', '#FFC000']
+bars = plt.bar(
+    age_noshow_sorted.index,
+    age_noshow_sorted.values,
+    color=colors,
+    edgecolor='black'
+)
+
+# Add value labels
+for bar, val in zip(bars, age_noshow_sorted.values):
+    plt.text(
+        bar.get_x() + bar.get_width()/2,
+        bar.get_height() + 0.5,
+        f'{val:.1f}%',
+        ha='center',
+        va='bottom',
+        fontweight='bold'
+    )
+
+plt.title(
+    'No-Show Rate by Age Group',
+    fontsize=16,
+    fontweight='bold',
+    pad=20  # extra space between title and plot
+)
+
+plt.xlabel('Age Group', fontsize=12)
+plt.ylabel('No-Show Rate (%)', fontsize=12)
+
+# Give headroom for labels
+plt.ylim(0, max(age_noshow_sorted.values) + 5)
+
+plt.tight_layout()
+
+plt.savefig(
+    'charts/noshow_by_age_group.png',
+    dpi=150,
+    bbox_inches='tight'
+)
+
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+plt.figure(figsize=(8, 8))
+
+# Count each value
+noshow_counts = df['no_show'].value_counts()
+
+labels = ['Showed Up', 'Did Not Show']
+colors = ['#90EE90', '#FF6B6B']
+explode = (0, 0.1)
+
+plt.pie(
+    noshow_counts.values,
+    labels=labels,
+    colors=colors,
+    explode=explode,
+    autopct='%1.1f%%',
+    startangle=90,
+    pctdistance=0.7
+)
+
+plt.title(
+    'Overall Appointment Attendance',
+    fontsize=16,
+    fontweight='bold',
+    pad=20
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    'charts/attendance_pie.png',
+    dpi=150,
+    bbox_inches='tight'
+)
+
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+plt.figure(figsize=(10, 6))
+sns.boxplot(
+    data=df,
+    x='no_show',
+    y='waiting_days',
+    palette=['#90EE90', '#FF6B6B']
+)
+plt.title('Waiting Days vs No-Show Status', fontsize=16, fontweight='bold')
+plt.xlabel('Did Patient No-Show?', fontsize=12)
+plt.ylabel('Days Between Booking and Appointment', fontsize=12)
+plt.ylim(0, 100)    # Focus on 0-100 days range
+plt.savefig('charts/waitingdays_boxplot.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+day_noshow = df.groupby('appointment_dayofweek')['no_show_binary'].mean() * 100
+day_noshow = day_noshow.reindex(day_order)
+
+plt.figure(figsize=(10, 6))
+plt.bar(day_noshow.index, day_noshow.values, color='#4472C4', edgecolor='black')
+plt.title('No-Show Rate by Day of Week', fontsize=16, fontweight='bold')
+plt.xlabel('Day of Week', fontsize=12)
+plt.ylabel('No-Show Rate (%)', fontsize=12)
+plt.xticks(rotation=15)
+plt.ylim(0, 30)
+plt.savefig('charts/noshow_by_day.png', dpi=150, bbox_inches='tight')
+plt.show()
